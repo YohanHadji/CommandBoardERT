@@ -43,21 +43,29 @@ void setup() {
   // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
 
+  WiFi.setSleep(false);
+
   esp_now_init();
   esp_now_register_recv_cb(handleEspNow);
 }
  
 void loop() {
-  while(ESPNowRxBuffer.available()) {
-    Binoculars.decode(ESPNowRxBuffer.read());
-  }
 }
+
+struct capsulePacketTest {
+  uint8_t pra;
+  uint8_t prb;
+  uint8_t packetId;
+  uint8_t len;
+  PacketBinocGlobalStatus binocGlobalStatus;
+  uint8_t crc;
+};
 
 // callback function that will be executed when data is received
 void handleEspNow(const uint8_t * mac, const uint8_t *incomingData, int len) {
   for (int i = 0; i < len; i++) {
-    ESPNowRxBuffer.write(incomingData[i]);
-  }  
+     Binoculars.decode(incomingData[i]);
+  } 
 }
 
 void handleBinoculars(uint8_t packetId, uint8_t *dataIn, uint32_t len) {
@@ -66,7 +74,7 @@ void handleBinoculars(uint8_t packetId, uint8_t *dataIn, uint32_t len) {
     case CAPSULE_ID::BINOC_ATTITUDE:
     case CAPSULE_ID::BINOC_POSITION:
     case CAPSULE_ID::BINOC_STATUS:
-    {
+    {  
       uint8_t* packetToSend = UartCapsule.encode(packetId,dataIn,len);
       UART_PORT.write(packetToSend,UartCapsule.getCodedLen(len));
       delete[] packetToSend;
