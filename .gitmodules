@@ -1,1 +1,4 @@
 
+[submodule "R2HomeTelemetryInterface"]
+	path = R2HomeTelemetryInterface
+	url = https://github.com/YohanHadji/R2HomeTelemetryInterface
