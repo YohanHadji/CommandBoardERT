@@ -27,6 +27,7 @@ static String cmdMemory;
 
 void printOnSerial();
 void putcharOnSerial(uint8_t c);
+double distanceTo(double lat1, double lng1, double lat2, double lng2);
 
 void setup() {
   // Initialize USBSerial Monitor
@@ -54,11 +55,29 @@ void loop() {
   const int cmdBufferSize = 256;
   static uint8_t buff[cmdBufferSize];
   static int buffIndex = 0;
+  static bool parsingCmd = false;
 
   while(SERIAL_TO_PC.available()) {
     digitalWrite(13, HIGH);
     uint8_t a = SERIAL_TO_PC.read();
-    if (a == '#') {
+    if (a == 'l' and !parsingCmd) {
+      memcpy(buff, "left", 4);
+      size_t codedSize = UartCapsule.getCodedLen(buffIndex);
+      byte* coded = UartCapsule.encode(CAPSULE_ID::DEVICE_TO_MOTHER, buff, 4);
+
+      UART_PORT.write(coded, codedSize);
+      delete[] coded;
+    }
+    else if (a == 'r' and !parsingCmd) {
+      memcpy(buff, "right", 5);
+      size_t codedSize = UartCapsule.getCodedLen(buffIndex);
+      byte* coded = UartCapsule.encode(CAPSULE_ID::DEVICE_TO_MOTHER, buff, 5);
+
+      UART_PORT.write(coded, codedSize);
+      delete[] coded;
+    }
+    else if (a == '#') {
+      parsingCmd = true;
       cmdMemory = "";
       for (int i = 0; i < cmdBufferSize; i++) {
         buff[i] = 0;
@@ -69,10 +88,10 @@ void loop() {
       cmdMemory += (char)a;
     }
     else {
+      parsingCmd = false;
       cmdMemory = " - Command sent: "+cmdMemory+" - ";
       size_t codedSize = UartCapsule.getCodedLen(buffIndex);
-      byte* coded = new byte[codedSize];
-      coded = UartCapsule.encode(CAPSULE_ID::DEVICE_TO_MOTHER, buff, buffIndex);
+      byte* coded = UartCapsule.encode(CAPSULE_ID::DEVICE_TO_MOTHER, buff, buffIndex);
 
       UART_PORT.write(coded, codedSize);
       buffIndex = 0;
@@ -200,12 +219,31 @@ void printOnSerial() {
   addstr(("Trajectory Longitude:  "+String(lastPacket.trajectoryLongitude,7)).c_str());
   lineIndex++;
   move(++lineIndex, colIndex);
-  addstr(("Distance to Traj:      "+String(lastPacket.distanceToTrajectory,1)).c_str());
+
+  float distanceToTrajectory;
+  float distanceToPosition;
+
+  distanceToTrajectory = distanceTo(lastPacket.trajectoryLatitude, lastPacket.trajectoryLongitude, lastPacket.waypointLatitude, lastPacket.waypointLongitude);
+  distanceToPosition = distanceTo(lastPacket.latitude, lastPacket.longitude, lastPacket.waypointLatitude, lastPacket.waypointLongitude);
+
+  addstr(("Distance to Traj:      "+String(distanceToTrajectory,1)).c_str());
   move(++lineIndex, colIndex);
-  addstr(("Distance to Position:  "+String(lastPacket.distanceToPosition,1)).c_str());
-  double distanceRatio = lastPacket.distanceToTrajectory/(lastPacket.altitude-lastPacket.waypointAltitude);
+  addstr(("Distance to Position:  "+String(distanceToPosition,1)).c_str());
+  double distanceRatio = distanceToTrajectory/(lastPacket.altitude-lastPacket.waypointAltitude);
   move(++lineIndex, colIndex);
   addstr(("Distance Ratio:        "+String(distanceRatio,1)).c_str());
+
+  move(++lineIndex, colIndex);
+  attrset((A_BOLD | F_WHITE | B_BLACK));
+  addstr("Control: ");
+  attrset((A_NORMAL | F_WHITE | B_BLACK));
+  lineIndex++;
+  move(++lineIndex, colIndex);
+  addstr(("Relative Heading Setpoint: "+String(lastPacket.relativeHeadingSetpoint,1)).c_str());
+  move(++lineIndex, colIndex);
+  addstr(("Relative Heading:          "+String(lastPacket.yaw,1)).c_str());
+  move(++lineIndex, colIndex);
+  addstr(("Projected Ground Speed:    "+String(lastPacket.projectedGroundSpeed,1)).c_str());
 
   lineIndex = lineIndex+5;
   colIndex = 10;
@@ -222,5 +260,21 @@ void printOnSerial() {
 
 void putcharOnSerial(uint8_t c) {
   SERIAL_TO_PC.write(c);
+}
+
+double distanceTo(double lat1, double lng1, double lat2, double lng2) {
+  double R = 6371000;
+  lat1 = lat1 * PI / 180.0;
+  lng1 = lng1 * PI / 180.0;
+  lat2 = lat2 * PI / 180.0;
+  lng2 = lng2 * PI / 180.0;
+
+  double dlat = lat2-lat1;
+  double dlng = lng2-lng1;
+
+  double a = sin(dlat/2) * sin(dlat/2) + cos(lat1) * cos(lat2) * sin(dlng/2) * sin(dlng/2);
+  double c = 2 * atan2(sqrt(a), sqrt(1-a));
+  double d = R * c;
+  return d;
 }
 
